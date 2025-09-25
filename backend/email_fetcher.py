@@ -37,10 +37,11 @@ def fetch_emails():
             # Insérer dans la DB
             c = conn.cursor()
             c.execute("""
-                INSERT INTO demandes (nom, prenom, telephone, ville, date_debut, date_fin, type_vehicule)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (infos['nom'], infos['prenom'], infos['telephone'], infos['ville'],
-                  infos['date_debut'], infos['date_fin'], infos['type_vehicule']))
+                INSERT INTO demandes (nom, prenom, telephone, ville, pays, date_debut, date_fin, 
+                                    date_voyage, type_vehicule, date_enregistrement)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            """, (infos['nom'], infos['prenom'], infos['telephone'], infos['ville'], infos['pays'],
+                  infos['date_debut'], infos['date_fin'], infos['date_voyage'], infos['type_vehicule']))
             conn.commit()
             c.close()
 

@@ -6,7 +6,7 @@ import os
 load_dotenv()
 
 EMAIL = os.getenv("EMAIL")
-APP_PASSWORD = os.getenv("APP_PASSWORD")
+APP_PASSWORD = os.getenv("APP_PASSWORDd")
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
 
