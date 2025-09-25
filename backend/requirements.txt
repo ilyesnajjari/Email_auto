@@ -1,0 +1,8 @@
+Flask
+Flask-Cors
+spacy
+dateparser
+requests
+python-dotenv
+email-validator
+pytest

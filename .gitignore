@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+.env
+venv/
+.env*
+
+# Node/Vite/React
+node_modules/
+dist/
+build/
+*.log
+
+# VSCode
+.vscode/
+
+# MacOS
+.DS_Store
+
+# Others
+*.sqlite3
+*.bak
+*.tmp
+*.swp
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Frontend static
+frontend/public/vite.svg
+frontend/src/assets/react.svg
