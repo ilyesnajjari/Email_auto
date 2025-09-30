@@ -11,9 +11,16 @@ import os
 from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta, date
 import secrets
+from dotenv import load_dotenv
 
 app = Flask(__name__)
 CORS(app)
+
+# Load environment variables from backend/.env if present (won't override real env)
+try:
+    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env'))
+except Exception:
+    pass
 
 # Runtime fetch status
 LAST_FETCH = {"mode": None, "inserted": 0, "at": None}
