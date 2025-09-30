@@ -6,6 +6,9 @@ const DemandesTable = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState({ ville: '', date: '' });
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewData, setPreviewData] = useState({ subject: '', body: '', recipients: [], ville: '', lang: '' });
+  const [sending, setSending] = useState(false);
 
   // URL de l'API backend (ajustez le port si nécessaire)
   const API_URL = 'http://localhost:5001';
@@ -33,19 +36,51 @@ const DemandesTable = () => {
     }
   };
 
-  const handleValidation = async (id) => {
+  const openPreview = async (id) => {
     try {
-      const response = await fetch(`${API_URL}/demandes/valider/${id}`, {
-        method: 'POST'
+      const resp = await fetch(`${API_URL}/demandes/${id}/email/preview`);
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || `Erreur HTTP: ${resp.status}`);
+      setPreviewData({
+        subject: data.subject || 'Nouvelle demande de location',
+        body: data.body || '',
+        recipients: data.recipients || [],
+        ville: data.ville || '',
+        lang: data.lang || 'fr',
+        id
       });
-      if (!response.ok) {
-        throw new Error(`Erreur HTTP: ${response.status}`);
-      }
-      // Recharger les demandes après validation
-      fetchDemandes();
-      alert('Demande validée et emails envoyés aux sous-traitants !');
+      setPreviewOpen(true);
     } catch (err) {
-      alert(`Erreur lors de la validation: ${err.message}`);
+      alert(`Erreur lors de la prévisualisation: ${err.message}`);
+    }
+  };
+
+  const sendWithEdits = async () => {
+    if (!previewData?.id) return;
+    if (!previewData.body.trim() || !previewData.recipients?.length) {
+      alert('Corps du mail et destinataires requis');
+      return;
+    }
+    try {
+      setSending(true);
+      const resp = await fetch(`${API_URL}/demandes/${previewData.id}/email/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject: previewData.subject,
+          body: previewData.body,
+          recipients: previewData.recipients,
+        })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || `Erreur HTTP: ${resp.status}`);
+      setPreviewOpen(false);
+      fetchDemandes();
+      alert('Email envoyé et demande validée');
+    } catch (err) {
+      alert(`Erreur lors de l\'envoi: ${err.message}`);
+    } finally {
+      setSending(false);
     }
   };
 
@@ -193,7 +228,7 @@ const DemandesTable = () => {
                   <td>
                     {demande.statut !== 'validee' && (
                       <button
-                        onClick={() => handleValidation(demande.id)}
+                        onClick={() => openPreview(demande.id)}
                         className="btn btn-validate"
                       >
                         ✅ Valider
@@ -211,3 +246,41 @@ const DemandesTable = () => {
 };
 
 export default DemandesTable;
+
+// Simple modal styles can be in CSS; add inline modal here for brevity
+export const EmailPreviewModal = ({ open, data, onClose, onChange, onSend, sending }) => {
+  if (!open) return null;
+  return (
+    <div className="modal-backdrop">
+      <div className="modal">
+        <h3>Prévisualiser l'email aux partenaires</h3>
+        <div>
+          <label>Sujet</label>
+          <input
+            value={data.subject}
+            onChange={e => onChange({ ...data, subject: e.target.value })}
+          />
+        </div>
+        <div>
+          <label>Destinataires</label>
+          <textarea
+            value={(data.recipients || []).join(', ')}
+            onChange={e => onChange({ ...data, recipients: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+          />
+        </div>
+        <div>
+          <label>Corps du mail</label>
+          <textarea
+            rows={12}
+            value={data.body}
+            onChange={e => onChange({ ...data, body: e.target.value })}
+          />
+        </div>
+        <div className="modal-actions">
+          <button onClick={onClose} className="btn">Annuler</button>
+          <button onClick={onSend} className="btn btn-primary" disabled={sending}>{sending ? 'Envoi…' : 'Envoyer'}</button>
+        </div>
+      </div>
+    </div>
+  );
+};

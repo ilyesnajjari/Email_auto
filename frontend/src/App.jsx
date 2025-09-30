@@ -6,7 +6,7 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [filter, setFilter] = useState({ ville: '', date: '' })
-  const [activeTab, setActiveTab] = useState('sous-traitants')
+  const [activeTab, setActiveTab] = useState('demandes')
   const [historique, setHistorique] = useState([])
   const [stats, setStats] = useState(null)
   const [sousTraitants, setSousTraitants] = useState([])
@@ -17,10 +17,49 @@ function App() {
     recherche: '' 
   })
   const [lastUpdate, setLastUpdate] = useState(null)
+  const [darkMode, setDarkMode] = useState(false)
+  const [popupContent, setPopupContent] = useState(null) // État pour le contenu de la popup
+  const [email, setEmail] = useState(localStorage.getItem('email') || '')
+  const [apiPassword, setApiPassword] = useState(localStorage.getItem('apiPassword') || '')
+  const [openaiKey, setOpenaiKey] = useState('')
+  const [openaiModel, setOpenaiModel] = useState(localStorage.getItem('OPENAI_MODEL') || 'gpt-4o-mini')
+  const [aiEnabled, setAiEnabled] = useState(false)
+  const [aiModelStatus, setAiModelStatus] = useState('')
+  const [lastFetch, setLastFetch] = useState({ mode: null, inserted: 0, at: null })
+  const [showCredentialsForm, setShowCredentialsForm] = useState(false); // État pour afficher/masquer le formulaire d'identifiants
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [previewData, setPreviewData] = useState({ subject: '', body: '', recipients: [], ville: '', lang: '', id: null })
+  const [sendingPreview, setSendingPreview] = useState(false)
+
+  // Admin auth state
+  const [adminRequired, setAdminRequired] = useState(false)
+  const [adminToken, setAdminToken] = useState(localStorage.getItem('adminToken') || '')
+  const [showLogin, setShowLogin] = useState(false)
+  const [adminPw, setAdminPw] = useState('')
+  const [loginError, setLoginError] = useState('')
+  // Auth gate to avoid early dashboard requests before we know if auth is required
+  const [authChecked, setAuthChecked] = useState(false)
+
+  // State pour le formulaire d'ajout de demande
+  const [newDemande, setNewDemande] = useState({
+    nom: '',
+    prenom: '',
+    telephone: '',
+    ville: '',
+    date_debut: '',
+    date_fin: '',
+    type_vehicule: '',
+    pays: '',
+    email: '',
+    nb_personnes: '',
+    infos_libres: '',
+    date_voyage: ''
+  });
 
   // Fonction pour récupérer les demandes
   const fetchDemandes = async () => {
     try {
+      if (adminRequired && !adminToken) return
       setLoading(true)
       const response = await fetch('http://localhost:5001/demandes')
       if (!response.ok) {
@@ -35,20 +74,54 @@ function App() {
     }
   }
 
-  // Fonction pour valider une demande
-  const validerDemande = async (id) => {
+  // Prévisualiser l'email avant envoi
+  const openEmailPreview = async (id) => {
     try {
-      const response = await fetch(`http://localhost:5001/demandes/valider/${id}`, {
-        method: 'POST'
+      if (adminRequired && !adminToken) { setShowLogin(true); return }
+      const resp = await fetch(`http://localhost:5001/demandes/${id}/email/preview`)
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data.error || 'Erreur lors de la prévisualisation')
+      setPreviewData({
+        subject: data.subject || 'Nouvelle demande de location',
+        body: data.body || '',
+        recipients: data.recipients || [],
+        ville: data.ville || '',
+        lang: data.lang || 'fr',
+        id
       })
-      if (!response.ok) {
-        throw new Error('Erreur lors de la validation')
-      }
-      // Recharger les demandes après validation
-      fetchDemandes()
-      alert('Demande validée et emails envoyés aux sous-traitants!')
+      setPreviewOpen(true)
     } catch (err) {
       alert('Erreur: ' + err.message)
+    }
+  }
+
+  const sendEmailWithEdits = async () => {
+    if (!previewData.id) return
+    if (!previewData.body.trim() || !previewData.recipients?.length) {
+      alert('Corps du mail et destinataires requis')
+      return
+    }
+    try {
+      if (adminRequired && !adminToken) { setShowLogin(true); return }
+      setSendingPreview(true)
+      const resp = await fetch(`http://localhost:5001/demandes/${previewData.id}/email/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject: previewData.subject,
+          body: previewData.body,
+          recipients: previewData.recipients,
+        })
+      })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data.error || 'Erreur lors de l\'envoi')
+      setPreviewOpen(false)
+      fetchDemandes()
+      alert('Email envoyé et demande validée')
+    } catch (err) {
+      alert('Erreur: ' + err.message)
+    } finally {
+      setSendingPreview(false)
     }
   }
 
@@ -58,6 +131,7 @@ function App() {
       return
     }
     try {
+      if (adminRequired && !adminToken) { setShowLogin(true); return }
       const response = await fetch(`http://localhost:5001/demandes/${id}`, {
         method: 'DELETE'
       })
@@ -75,6 +149,7 @@ function App() {
   // Fonction pour récupérer l'historique
   const fetchHistorique = async () => {
     try {
+      if (adminRequired && !adminToken) return
       setLoading(true)
       const response = await fetch('http://localhost:5001/historique')
       if (!response.ok) {
@@ -92,6 +167,7 @@ function App() {
   // Fonction pour récupérer les statistiques
   const fetchStats = async () => {
     try {
+      if (adminRequired && !adminToken) return
       setLoading(true)
       const response = await fetch('http://localhost:5001/reporting/stats')
       if (!response.ok) {
@@ -109,6 +185,7 @@ function App() {
   // Fonction pour récupérer les sous-traitants
   const fetchSousTraitants = async (showNotification = false) => {
     try {
+      if (adminRequired && !adminToken) return
       setLoading(true)
       const response = await fetch('http://localhost:5001/sous-traitants')
       if (!response.ok) {
@@ -143,6 +220,7 @@ function App() {
   // Fonction pour upload du fichier Excel
   const uploadExcel = async (file) => {
     try {
+      if (adminRequired && !adminToken) { setShowLogin(true); return }
       setLoading(true)
       setUploadStatus(null)
       
@@ -185,6 +263,7 @@ function App() {
       return
     }
     try {
+      if (adminRequired && !adminToken) { setShowLogin(true); return }
       const response = await fetch(`http://localhost:5001/sous-traitants/${id}`, {
         method: 'DELETE'
       })
@@ -202,6 +281,7 @@ function App() {
   // Fonction pour récupérer les emails
   const fetchEmails = async () => {
     try {
+      if (adminRequired && !adminToken) { setShowLogin(true); return }
       const response = await fetch('http://localhost:5001/fetch_emails', {
         method: 'POST'
       })
@@ -212,13 +292,48 @@ function App() {
       // Recharger les demandes après un délai
       setTimeout(() => {
         fetchDemandes()
+        // Récupérer l'état du dernier fetch (mode AI/NLP, inserted)
+        fetch('http://localhost:5001/fetch_status')
+          .then(r => r.json())
+          .then(setLastFetch)
       }, 3000)
     } catch (err) {
       alert('Erreur: ' + err.message)
     }
   }
 
+  const saveCredentials = async () => {
+    try {
+      if (adminRequired && !adminToken) { setShowLogin(true); return }
+      const response = await fetch('http://localhost:5001/save_credentials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, api_password: apiPassword, OPENAI_API_KEY: openaiKey, OPENAI_MODEL: openaiModel })
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || 'Erreur lors de la sauvegarde des identifiants');
+      }
+      localStorage.setItem('email', email);
+      localStorage.setItem('apiPassword', apiPassword);
+      localStorage.setItem('OPENAI_MODEL', openaiModel);
+      alert('Identifiants enregistrés côté serveur !');
+      // Rafraîchir le statut IA
+      fetch('http://localhost:5001/credentials/status')
+        .then(r=>r.json())
+        .then(d => {
+          setAiEnabled(!!d.openai_present)
+          if (d.model) setAiModelStatus(d.model)
+        })
+    } catch (err) {
+      alert('Erreur: ' + err.message);
+    }
+  }
+
   useEffect(() => {
+    // Ne lance pas de requêtes tant que l'auth n'est pas vérifiée
+    if (!authChecked) return
+    if (adminRequired && !adminToken) return
     if (activeTab === 'demandes') {
       fetchDemandes()
     } else if (activeTab === 'historique') {
@@ -228,25 +343,113 @@ function App() {
     } else if (activeTab === 'sous-traitants') {
       fetchSousTraitants()
     }
-  }, [activeTab])
+  }, [activeTab, authChecked, adminRequired, adminToken])
 
   useEffect(() => {
-    // Charger toutes les données au démarrage pour affichage permanent
-    fetchSousTraitants()
-    fetchDemandes()
-    fetchHistorique()
-    fetchStats()
+    // Global fetch wrapper to inject admin token and handle 401
+    const originalFetch = window.fetch
+    window.fetch = async (input, init = {}) => {
+      const headers = new Headers(init.headers || {})
+      if (adminToken) headers.set('Authorization', `Bearer ${adminToken}`)
+      const nextInit = { ...init, headers }
+      const resp = await originalFetch(input, nextInit)
+      if (resp.status === 401) {
+        setShowLogin(true)
+        setAdminToken('')
+        localStorage.removeItem('adminToken')
+      }
+      return resp
+    }
+    return () => { window.fetch = originalFetch }
+  }, [adminToken])
 
-    // Rafraîchissement automatique toutes les 5 minutes pour maintenir les données à jour
-    const interval = setInterval(() => {
-      fetchSousTraitants()
-      if (activeTab === 'demandes') fetchDemandes()
-      if (activeTab === 'historique') fetchHistorique()
-      if (activeTab === 'reporting') fetchStats()
-    }, 5 * 60 * 1000) // 5 minutes
-
-    return () => clearInterval(interval)
+  useEffect(() => {
+    // Découvrir si l'API exige un login admin avant d'afficher quoi que ce soit
+    let interval
+    const init = async () => {
+      try {
+        const h = await fetch('http://localhost:5001/health')
+        const d = await h.json()
+        const req = !!d.require_admin
+        setAdminRequired(req)
+        if (req && !adminToken) setShowLogin(true)
+      } catch (e) {
+        // ignore
+      } finally {
+        setAuthChecked(true)
+      }
+      // Charger statut IA et données seulement si accès autorisé
+      if (!adminRequired || adminToken) {
+        try {
+          const r = await fetch('http://localhost:5001/credentials/status')
+          if (r.ok) {
+            const d2 = await r.json()
+            setAiEnabled(!!d2.openai_present)
+            if (d2.model) setAiModelStatus(d2.model)
+          }
+        } catch {}
+        fetchSousTraitants()
+        fetchDemandes()
+        fetchHistorique()
+        fetchStats()
+      }
+      interval = setInterval(() => {
+        if (!adminRequired || adminToken) {
+          fetchSousTraitants()
+          if (activeTab === 'demandes') fetchDemandes()
+          if (activeTab === 'historique') fetchHistorique()
+          if (activeTab === 'reporting') fetchStats()
+        }
+      }, 5 * 60 * 1000)
+    }
+    init()
+    return () => { if (interval) clearInterval(interval) }
   }, [])
+
+  // Une fois le token présent (page rechargée avec token en localStorage), charger les données
+  useEffect(() => {
+    if (!authChecked) return
+    if (adminRequired && adminToken) {
+      fetchSousTraitants()
+      fetchDemandes()
+      fetchHistorique()
+      fetchStats()
+    }
+  }, [adminToken, adminRequired, authChecked])
+
+  const doLogin = async (e) => {
+    e?.preventDefault()
+    setLoginError('')
+    try {
+      const resp = await fetch('http://localhost:5001/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: adminPw })
+      })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data.error || 'Mot de passe invalide')
+      if (data.token) {
+        setAdminToken(data.token)
+        localStorage.setItem('adminToken', data.token)
+        setAdminRequired(!!data.require_admin)
+        setShowLogin(false)
+        setAdminPw('')
+        // Charger les données après connexion
+        fetchSousTraitants()
+        fetchDemandes()
+        fetchHistorique()
+        fetchStats()
+      }
+    } catch (err) {
+      setLoginError(err.message)
+    }
+  }
+
+  const doLogout = () => {
+    setAdminToken('')
+    localStorage.removeItem('adminToken')
+    if (adminRequired) setShowLogin(true)
+  }
 
   // Calculs pour le filtrage des sous-traitants
   const sousTraitantsFiltres = sousTraitants.filter(st => {
@@ -275,12 +478,75 @@ function App() {
     return acc;
   }, {});
 
+  useEffect(() => {
+    document.body.classList.toggle('dark-mode', darkMode);
+  }, [darkMode]);
+
+  // Actualisation automatique des sous-traitants après une erreur
+  useEffect(() => {
+    if (activeTab === 'demandes' && error) {
+      const timer = setTimeout(() => {
+        setError(null);
+        fetchDemandes();
+      }, 2500); // 2,5 secondes avant de réessayer
+      return () => clearTimeout(timer);
+    }
+  }, [activeTab, error]);
+
+  // Écran d'attente pendant la vérification d'auth
+  if (!authChecked) {
+    return (
+      <div className="app" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="loading">Initialisation...</div>
+      </div>
+    )
+  }
+  // Page de connexion dédiée
+  if ((adminRequired && !adminToken) || showLogin) {
+    return (
+      <div className="app" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f4f6f8' }}>
+        <form onSubmit={doLogin} style={{ background: '#fff', padding: 28, borderRadius: 10, width: 360, boxShadow: '0 10px 30px rgba(0,0,0,0.08)' }}>
+          <h2 style={{ marginTop: 0, marginBottom: 6, color: '#2c3e50' }}>Connexion admin</h2>
+          <p style={{ marginTop: 0, color: '#666', fontSize: 14 }}>Veuillez entrer le mot de passe administrateur pour accéder au tableau de bord.</p>
+          <input type="password" placeholder="Mot de passe admin" value={adminPw} onChange={e => setAdminPw(e.target.value)} style={{ width: '100%', padding: 12, marginTop: 12, marginBottom: 10, borderRadius: 8, border: '1px solid #dfe6e9' }} />
+          {loginError && <div style={{ color: '#c0392b', marginBottom: 10, fontSize: 14 }}>{loginError}</div>}
+          <button type="submit" style={{ width: '100%', padding: 12, border: 'none', borderRadius: 8, background: '#2c3e50', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>Se connecter</button>
+        </form>
+      </div>
+    )
+  }
+
   return (
     <div className="app">
-      <header className="app-header">
+      <header className={`app-header ${darkMode ? 'dark-mode' : ''}`}>
         <h1><i className="fas fa-car"></i> Système de Gestion de Location</h1>
         <p>Automatisation du traitement des demandes par email</p>
-        
+  <div style={{ marginTop: '8px', display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+          <span
+            className="badge"
+            style={{
+              background: aiEnabled ? '#27ae60' : '#7f8c8d',
+              color: '#fff',
+              padding: '4px 8px',
+              borderRadius: '6px',
+              fontSize: '0.85rem'
+            }}
+          >
+            {aiEnabled ? `IA activée (${aiModelStatus || openaiModel})` : 'IA désactivée'}
+          </span>
+           {(adminRequired && adminToken) && (
+             <button onClick={doLogout} style={{ padding: '4px 12px', borderRadius: 6, border: 'none', background: '#c0392b', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>Se déconnecter</button>
+           )}
+          {lastFetch?.at && (
+            <span
+              className="badge"
+              style={{ background: '#34495e', color: '#ecf0f1', padding: '4px 8px', borderRadius: '6px', fontSize: '0.85rem' }}
+              title={`Mode: ${lastFetch.mode || 'N/A'}`}
+            >
+              Dernier fetch: {new Date(lastFetch.at).toLocaleString('fr-FR')} • insérés: {lastFetch.inserted}
+            </span>
+          )}
+        </div>
         {/* Navigation par onglets */}
         <nav className="tabs">
           <button 
@@ -307,6 +573,22 @@ function App() {
           >
             <i className="fas fa-users"></i> Sous-traitants
           </button>
+          <button 
+            onClick={() => setDarkMode(!darkMode)} 
+            className="btn btn-outline"
+            title={darkMode ? "Mode clair" : "Mode sombre"}
+          >
+            {darkMode ? (
+              <>
+                <i className="fas fa-sun"></i> {/* Icône soleil */}
+              </>
+            ) : (
+              <>
+                <i className="fas fa-moon"></i> {/* Icône lune */}
+              </>
+            )}
+          </button>
+
         </nav>
         
         {/* Actions selon l'onglet actif */}
@@ -342,6 +624,7 @@ function App() {
             >
               <i className="fas fa-download"></i> Exporter Rapport
             </a>
+            
           )}
           {activeTab === 'sous-traitants' && (
             <>
@@ -400,24 +683,75 @@ function App() {
 
       <main className="app-main">
         {loading && <div className="loading">Chargement...</div>}
-        {error && <div className="error">Erreur: {error}</div>}
+        {error && (
+          activeTab === 'demandes'
+            ? <div className="loading">Attente avant actualisation...</div>
+            : <div className="error">Erreur: {error}</div>
+        )}
         
         {/* Onglet Demandes */}
         {activeTab === 'demandes' && !loading && !error && (
           <div className="demandes-container">
             <h2>Demandes de location ({demandes.length})</h2>
-            
+
+            {/* Formulaire d'ajout de demande */}
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setLoading(true);
+                setError(null);
+                try {
+                  const response = await fetch('http://localhost:5001/demandes', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newDemande)
+                  });
+                  if (!response.ok) {
+                    const res = await response.json();
+                    throw new Error(res.error || 'Erreur lors de l\'ajout');
+                  }
+                  setNewDemande({
+                    nom: '', prenom: '', telephone: '', ville: '', date_debut: '', date_fin: '', type_vehicule: '', pays: '', email: '', nb_personnes: '', infos_libres: ''
+                  });
+                  fetchDemandes();
+                  alert('Demande ajoutée avec succès!');
+                } catch (err) {
+                  setError(err.message);
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              style={{ marginBottom: '2rem', background: '#f8f9ff', padding: '1rem', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}
+            >
+              <h3>Ajouter une demande</h3>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
+                <input required type="text" placeholder="Nom" value={newDemande.nom} onChange={e => setNewDemande({ ...newDemande, nom: e.target.value })} />
+                <input required type="text" placeholder="Prénom" value={newDemande.prenom} onChange={e => setNewDemande({ ...newDemande, prenom: e.target.value })} />
+                <input type="email" placeholder="Email" value={newDemande.email} onChange={e => setNewDemande({ ...newDemande, email: e.target.value })} />
+                <input type="text" placeholder="Téléphone" value={newDemande.telephone} onChange={e => setNewDemande({ ...newDemande, telephone: e.target.value })} />
+                <input type="text" placeholder="Ville" value={newDemande.ville} onChange={e => setNewDemande({ ...newDemande, ville: e.target.value })} />
+                <input type="text" placeholder="Pays" value={newDemande.pays} onChange={e => setNewDemande({ ...newDemande, pays: e.target.value })} />
+                <input type="date" placeholder="Date début" value={newDemande.date_debut} onChange={e => setNewDemande({ ...newDemande, date_debut: e.target.value })} />
+                <input type="date" placeholder="Date fin" value={newDemande.date_fin} onChange={e => setNewDemande({ ...newDemande, date_fin: e.target.value })} />
+                <input type="date" placeholder="Date voyage" value={newDemande.date_voyage || ''} onChange={e => setNewDemande({ ...newDemande, date_voyage: e.target.value })} />
+                <input type="text" placeholder="Type de véhicule" value={newDemande.type_vehicule} onChange={e => setNewDemande({ ...newDemande, type_vehicule: e.target.value })} />
+                <input type="number" min="1" placeholder="Nb personnes" value={newDemande.nb_personnes} onChange={e => setNewDemande({ ...newDemande, nb_personnes: e.target.value })} />
+                <input type="text" placeholder="Infos libres" value={newDemande.infos_libres} onChange={e => setNewDemande({ ...newDemande, infos_libres: e.target.value })} />
+              </div>
+              <button type="submit" className="btn btn-primary" style={{ marginTop: '1rem' }}>Ajouter</button>
+            </form>
+
             {demandes.length === 0 ? (
               <div className="empty-state">
                 <p>Aucune demande trouvée.</p>
                 <p>Cliquez sur "Récupérer les emails" pour analyser les nouveaux emails.</p>
               </div>
             ) : (
-              <div className="demandes-table">
+              <div className="demandes-table" style={{ overflowX: 'auto' }}>
                 <table>
                   <thead>
                     <tr>
-                      <th>N° Demande</th>
+                      <th>N° Id</th>
                       <th>Status</th>
                       <th>Jours restants</th>
                       <th>Date enr</th>
@@ -428,6 +762,8 @@ function App() {
                       <th>Ville</th>
                       <th>Téléphone</th>
                       <th>Véhicule</th>
+                      <th>Nbr de personnes</th>
+                      <th>Sous-traitants</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
@@ -473,13 +809,15 @@ function App() {
                             ) : '-'}
                           </td>
                           <td>{demande.type_vehicule}</td>
+                          <td>{demande.nb_personnes || '-'}</td>
+                          <td>{demande.nb_sous_traitants || 0}</td>
                           <td>
                             <div className="action-buttons">
                               {demande.statut === 'en_attente' && (
                                 <button 
-                                  onClick={() => validerDemande(demande.id)}
+                                  onClick={() => openEmailPreview(demande.id)}
                                   className="btn btn-success btn-small"
-                                  title="Valider la demande"
+                                  title="Prévisualiser et envoyer"
                                 >
                                   <i className="fas fa-check"></i>
                                 </button>
@@ -490,6 +828,17 @@ function App() {
                                 title="Supprimer la demande"
                               >
                                 <i className="fas fa-trash"></i>
+                              </button>
+                              {/* Add a button to show the email body in a popup */}
+                              <button 
+                                onClick={() => {
+                                  console.log('Corps du mail:', demande.corps_mail); // Log the email body
+                                  setPopupContent(demande.corps_mail)
+                                }} 
+                                className="btn btn-info btn-small" 
+                                title="Voir le corps du mail"
+                              >
+                                <i className="fas fa-eye"></i>
                               </button>
                             </div>
                           </td>
@@ -635,30 +984,6 @@ function App() {
                     </span>
                   )}
                 </p>
-                <div className="sous-traitants-stats">
-                  {loading && (
-                    <div className="stat-badge loading">
-                      <i className="fas fa-spinner fa-spin"></i>
-                      <span className="stat-label">Actualisation...</span>
-                    </div>
-                  )}
-                  <div className="stat-badge">
-                    <span className="stat-number">{sousTraitantsFiltres.length}</span>
-                    <span className="stat-label">Affichés</span>
-                  </div>
-                  <div className="stat-badge">
-                    <span className="stat-number">{sousTraitants.length}</span>
-                    <span className="stat-label">Total</span>
-                  </div>
-                  <div className="stat-badge">
-                    <span className="stat-number">{Object.keys(statsVilles).length}</span>
-                    <span className="stat-label">Villes</span>
-                  </div>
-                  <div className="stat-badge">
-                    <span className="stat-number">{Object.keys(statsPays).length}</span>
-                    <span className="stat-label">Pays</span>
-                  </div>
-                </div>
               </div>
 
               {/* Section de filtres et recherche */}
@@ -781,7 +1106,155 @@ function App() {
                   </table>
                 </div>
               )}
+
+              {/* Section des statistiques sous forme de bulles */}
+              <div className="stats-bubbles">
+                <div className="bubble">
+                  <span className="bubble-number">{sousTraitantsFiltres.length}</span>
+                  <span className="bubble-label">Affichés</span>
+                </div>
+                <div className="bubble">
+                  <span className="bubble-number">{sousTraitants.length}</span>
+                  <span className="bubble-label">Total</span>
+                </div>
+                <div className="bubble">
+                  <span className="bubble-number">{Object.keys(statsVilles).length}</span>
+                  <span className="bubble-label">Villes</span>
+                </div>
+                <div className="bubble">
+                  <span className="bubble-number">{Object.keys(statsPays).length}</span>
+                  <span className="bubble-label">Pays</span>
+                </div>
+              </div>
             </div>
+        )}
+
+        {/* Popup pour afficher le corps du mail */}
+        {popupContent && (
+          <div className="popup-overlay" onClick={() => setPopupContent(null)}>
+            <div className="popup-content" onClick={(e) => e.stopPropagation()}>
+              <button className="close-popup" onClick={() => setPopupContent(null)}>&times;</button>
+              <h3>Corps du mail</h3>
+              <p>{popupContent}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de prévisualisation d'email */}
+        {previewOpen && (
+          <div className="popup-overlay" onClick={() => setPreviewOpen(false)}>
+            <div className="popup-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px', width: '95%' }}>
+              <button className="close-popup" onClick={() => setPreviewOpen(false)}>&times;</button>
+              <h3>Prévisualiser l'email aux sous-traitants</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div>
+                  <label>Sujet</label>
+                  <input
+                    type="text"
+                    value={previewData.subject}
+                    onChange={(e) => setPreviewData({ ...previewData, subject: e.target.value })}
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label>Destinataires (BCC)</label>
+                  <input
+                    type="text"
+                    value={(previewData.recipients || []).join(', ')}
+                    onChange={(e) => setPreviewData({ ...previewData, recipients: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+                    placeholder="email1@example.com, email2@example.com"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label>Corps du message</label>
+                  <textarea
+                    value={previewData.body}
+                    onChange={(e) => setPreviewData({ ...previewData, body: e.target.value })}
+                    rows={14}
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                  <button className="btn btn-outline" onClick={() => setPreviewOpen(false)}>Annuler</button>
+                  <button className="btn btn-primary" onClick={sendEmailWithEdits} disabled={sendingPreview}>
+                    {sendingPreview ? 'Envoi...' : 'Envoyer et valider'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add a button to toggle the credentials form */}
+        <button
+          onClick={() => setShowCredentialsForm(!showCredentialsForm)}
+          style={{ margin: '20px', padding: '10px', backgroundColor: '#28a745', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+        >
+          {showCredentialsForm ? 'Masquer le formulaire' : 'Afficher le formulaire'}
+        </button>
+
+        {/* Formulaire pour saisir l'email et le mot de passe API */}
+        {showCredentialsForm && (
+          <div className="credentials-form" style={{ maxWidth: '400px', margin: '20px auto', padding: '20px', border: '1px solid #ccc', borderRadius: '8px', boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)' }}>
+            <h3 style={{ textAlign: 'center', marginBottom: '20px' }}>Connectez-vous à votre compte</h3>
+            <div style={{ marginBottom: '15px' }}>
+              <label htmlFor="email" style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Email</label>
+              <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #ccc', borderRadius: '4px', padding: '5px' }}>
+                <i className="fas fa-envelope" style={{ marginRight: '10px', color: '#888' }}></i>
+                <input
+                  id="email"
+                  type="email"
+                  placeholder="Entrez votre email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  style={{ flex: '1', border: 'none', outline: 'none' }}
+                />
+              </div>
+            </div>
+            <div style={{ marginBottom: '20px' }}>
+              <label htmlFor="apiPassword" style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Mot de passe API</label>
+              <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #ccc', borderRadius: '4px', padding: '5px' }}>
+                <i className="fas fa-key" style={{ marginRight: '10px', color: '#888' }}></i>
+                <input
+                  id="apiPassword"
+                  type="password"
+                  placeholder="Entrez votre mot de passe API"
+                  value={apiPassword}
+                  onChange={(e) => setApiPassword(e.target.value)}
+                  style={{ flex: '1', border: 'none', outline: 'none' }}
+                />
+              </div>
+            </div>
+            <div style={{ marginBottom: '15px' }}>
+              <label htmlFor="openaiKey" style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Clé OpenAI (optionnel)</label>
+              <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #ccc', borderRadius: '4px', padding: '5px' }}>
+                <i className="fas fa-robot" style={{ marginRight: '10px', color: '#888' }}></i>
+                <input
+                  id="openaiKey"
+                  type="password"
+                  placeholder="OPENAI_API_KEY"
+                  value={openaiKey}
+                  onChange={(e) => setOpenaiKey(e.target.value)}
+                  style={{ flex: '1', border: 'none', outline: 'none' }}
+                />
+              </div>
+            </div>
+            <div style={{ marginBottom: '20px' }}>
+              <label htmlFor="openaiModel" style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Modèle OpenAI</label>
+              <select id="openaiModel" value={openaiModel} onChange={(e)=> setOpenaiModel(e.target.value)} className="form-select" style={{ width: '100%' }}>
+                <option value="gpt-4o-mini">gpt-4o-mini (défaut)</option>
+                <option value="gpt-4o">gpt-4o</option>
+                <option value="o4-mini">o4-mini</option>
+              </select>
+            </div>
+            <button
+              onClick={saveCredentials}
+              style={{ width: '100%', padding: '10px', backgroundColor: '#007BFF', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+            >
+              Enregistrer les identifiants
+            </button>
+          </div>
         )}
       </main>
  

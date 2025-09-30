@@ -3,6 +3,14 @@
 Script de test pour vérifier la connexion email
 """
 
+# Rendre importables les modules du dossier backend quand on exécute depuis backend/Test
+import os
+import sys
+CURRENT_DIR = os.path.dirname(__file__)
+BACKEND_DIR = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
+if BACKEND_DIR not in sys.path:
+    sys.path.insert(0, BACKEND_DIR)
+
 import imaplib
 import email
 from email.mime.text import MIMEText
@@ -130,11 +138,15 @@ def test_email_parsing():
         print("✅ Module nlp_parser importé avec succès")
         
         # Test du parsing
-        infos = extraire_infos(test_email_content)
+        infos_list = extraire_infos(test_email_content)
         print("✅ Parsing réussi:")
-        for key, value in infos.items():
-            print(f"   {key}: {value}")
-        
+        if not infos_list:
+            print("   (aucune demande détectée)")
+        else:
+            for i, infos in enumerate(infos_list, 1):
+                print(f"\n   Demande #{i}")
+                for key, value in infos.items():
+                    print(f"     {key}: {value}")
         return True
         
     except ImportError as e:
