@@ -102,20 +102,7 @@ class Database:
                     # Ignore if ALTER not applicable in some environments
                     pass
 
-        # Safe migration: if legacy 'nom' exists, backfill nom_entreprise when empty
-        if self.column_exists("sous_traitants", "nom") and self.column_exists("sous_traitants", "nom_entreprise"):
-            try:
-                self.c.execute(
-                    """
-                    UPDATE sous_traitants
-                    SET nom_entreprise = nom
-                    WHERE (nom_entreprise IS NULL OR nom_entreprise = '')
-                      AND nom IS NOT NULL AND nom != ''
-                    """
-                )
-            except Exception:
-                # If target/source mismatch, skip silently
-                pass
+
 
         self.conn.commit()
 
@@ -174,20 +161,8 @@ class Database:
 
     # --- Copier nom dans nom_entreprise si vide ---
     def sync_sous_traitants_nom(self):
-        """No-op if 'nom' column doesn't exist. Kept for backward compatibility."""
-        if self.column_exists("sous_traitants", "nom") and self.column_exists("sous_traitants", "nom_entreprise"):
-            try:
-                self.c.execute(
-                    """
-                    UPDATE sous_traitants
-                    SET nom_entreprise = nom
-                    WHERE (nom_entreprise IS NULL OR nom_entreprise = '')
-                      AND nom IS NOT NULL AND nom != ''
-                    """
-                )
-                self.conn.commit()
-            except Exception:
-                pass
+        """Fonction désactivée : la colonne 'nom' n'est pas utilisée dans le schéma actuel."""
+        pass
 
     # --- Fermer la connexion ---
     def close(self):
