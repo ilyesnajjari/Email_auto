@@ -1,7 +1,8 @@
 import sqlite3
 import datetime
+import re
 
-# Connexion globale
+# Connexion globale à SQLite
 conn = sqlite3.connect("demandes.db", check_same_thread=False)
 c = conn.cursor()
 
@@ -11,7 +12,9 @@ class Database:
         self.c = self.conn.cursor()
         self.create_tables()
         self.add_missing_columns()
+        self.add_missing_columns_sous_traitants()
 
+    # --- Création des tables ---
     def create_tables(self):
         self.c.execute("""
         CREATE TABLE IF NOT EXISTS demandes (
@@ -27,6 +30,7 @@ class Database:
             sous_traitant TEXT
         );
         """)
+
         self.c.execute("""
         CREATE TABLE IF NOT EXISTS sous_traitants (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,6 +39,7 @@ class Database:
             ville TEXT
         );
         """)
+
         self.c.execute("""
         CREATE TABLE IF NOT EXISTS historique (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,13 +58,14 @@ class Database:
         );
         """)
 
+    # --- Vérifier si une colonne existe ---
     def column_exists(self, table_name, column_name):
         self.c.execute(f"PRAGMA table_info({table_name})")
         columns = [col[1] for col in self.c.fetchall()]
         return column_name in columns
 
+    # --- Ajouter les colonnes manquantes pour 'demandes' ---
     def add_missing_columns(self):
-        # Colonnes supplémentaires pour 'demandes'
         for col, col_type in [
             ("date_enregistrement", "TEXT"),
             ("date_voyage", "TEXT"),
@@ -74,7 +80,15 @@ class Database:
         ]:
             if not self.column_exists("demandes", col):
                 self.c.execute(f"ALTER TABLE demandes ADD COLUMN {col} {col_type}")
+        self.conn.commit()
 
+    # --- Ajouter les colonnes manquantes pour 'sous_traitants' ---
+    def add_missing_columns_sous_traitants(self):
+        if not self.column_exists("sous_traitants", "nom_entreprise"):
+            self.c.execute("ALTER TABLE sous_traitants ADD COLUMN nom_entreprise TEXT")
+        self.conn.commit()
+
+    # --- Insert demande ---
     def insert_demande(self, data):
         def _to_csv(val):
             if isinstance(val, list):
@@ -87,23 +101,18 @@ class Database:
             if val is None:
                 return None
             try:
-                # Already an int-like value
                 if isinstance(val, int):
                     return val
                 s = str(val).strip()
                 if not s:
                     return None
-                # Pure digits
-                if s.isdigit():
-                    return int(s)
-                # Extract first integer from ranges like "10-20", "10 à 20", "10 to 20", or labels like "12 pax"
-                import re
                 m = re.search(r"(\d{1,4})", s)
                 if m:
                     return int(m.group(1))
             except Exception:
                 pass
             return None
+
         query = """
         INSERT INTO demandes (
             nom, prenom, telephone, ville, date_debut, date_fin,
@@ -132,6 +141,16 @@ class Database:
         ))
         self.conn.commit()
 
+    # --- Copier nom dans nom_entreprise si vide ---
+    def sync_sous_traitants_nom(self):
+        self.c.execute("""
+        UPDATE sous_traitants
+        SET nom_entreprise = nom
+        WHERE nom_entreprise IS NULL AND nom IS NOT NULL
+        """)
+        self.conn.commit()
+
+    # --- Fermer la connexion ---
     def close(self):
         self.c.close()
         self.conn.close()
