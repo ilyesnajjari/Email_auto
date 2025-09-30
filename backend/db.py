@@ -84,8 +84,39 @@ class Database:
 
     # --- Ajouter les colonnes manquantes pour 'sous_traitants' ---
     def add_missing_columns_sous_traitants(self):
-        if not self.column_exists("sous_traitants", "nom_entreprise"):
-            self.c.execute("ALTER TABLE sous_traitants ADD COLUMN nom_entreprise TEXT")
+        # Ensure sous_traitants has the columns used by the API upload endpoint
+        columns_to_add = [
+            ("nom_entreprise", "TEXT"),
+            ("site_internet", "TEXT"),
+            ("pays", "TEXT"),
+            # 'ville' and 'email' are created in base schema; keep guard anyway
+            ("ville", "TEXT"),
+            ("email", "TEXT"),
+            ("telephone", "TEXT"),
+        ]
+        for name, ctype in columns_to_add:
+            if not self.column_exists("sous_traitants", name):
+                try:
+                    self.c.execute(f"ALTER TABLE sous_traitants ADD COLUMN {name} {ctype}")
+                except Exception:
+                    # Ignore if ALTER not applicable in some environments
+                    pass
+
+        # Safe migration: if legacy 'nom' exists, backfill nom_entreprise when empty
+        if self.column_exists("sous_traitants", "nom") and self.column_exists("sous_traitants", "nom_entreprise"):
+            try:
+                self.c.execute(
+                    """
+                    UPDATE sous_traitants
+                    SET nom_entreprise = nom
+                    WHERE (nom_entreprise IS NULL OR nom_entreprise = '')
+                      AND nom IS NOT NULL AND nom != ''
+                    """
+                )
+            except Exception:
+                # If target/source mismatch, skip silently
+                pass
+
         self.conn.commit()
 
     # --- Insert demande ---
@@ -143,12 +174,20 @@ class Database:
 
     # --- Copier nom dans nom_entreprise si vide ---
     def sync_sous_traitants_nom(self):
-        self.c.execute("""
-        UPDATE sous_traitants
-        SET nom_entreprise = nom
-        WHERE nom_entreprise IS NULL AND nom IS NOT NULL
-        """)
-        self.conn.commit()
+        """No-op if 'nom' column doesn't exist. Kept for backward compatibility."""
+        if self.column_exists("sous_traitants", "nom") and self.column_exists("sous_traitants", "nom_entreprise"):
+            try:
+                self.c.execute(
+                    """
+                    UPDATE sous_traitants
+                    SET nom_entreprise = nom
+                    WHERE (nom_entreprise IS NULL OR nom_entreprise = '')
+                      AND nom IS NOT NULL AND nom != ''
+                    """
+                )
+                self.conn.commit()
+            except Exception:
+                pass
 
     # --- Fermer la connexion ---
     def close(self):
