@@ -2,6 +2,11 @@ import { useState, useEffect } from 'react'
 import './App.css'
 
 function App() {
+  // Config API base (set VITE_API_BASE in production, e.g., https://email-ghxt.onrender.com)
+  const RAW_API_BASE = import.meta.env.VITE_API_BASE || ''
+  const API_BASE = (RAW_API_BASE || '').replace(/\/+$/, '')
+  const url = (path) => `${API_BASE}${path}`
+
   const [demandes, setDemandes] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -61,7 +66,7 @@ function App() {
     try {
       if (adminRequired && !adminToken) return
       setLoading(true)
-      const response = await fetch('http://localhost:5001/demandes')
+  const response = await fetch(url('/demandes'))
       if (!response.ok) {
         throw new Error('Erreur lors de la récupération des demandes')
       }
@@ -78,7 +83,7 @@ function App() {
   const openEmailPreview = async (id) => {
     try {
       if (adminRequired && !adminToken) { setShowLogin(true); return }
-      const resp = await fetch(`http://localhost:5001/demandes/${id}/email/preview`)
+  const resp = await fetch(url(`/demandes/${id}/email/preview`))
       const data = await resp.json()
       if (!resp.ok) throw new Error(data.error || 'Erreur lors de la prévisualisation')
       setPreviewData({
@@ -104,7 +109,7 @@ function App() {
     try {
       if (adminRequired && !adminToken) { setShowLogin(true); return }
       setSendingPreview(true)
-      const resp = await fetch(`http://localhost:5001/demandes/${previewData.id}/email/send`, {
+  const resp = await fetch(url(`/demandes/${previewData.id}/email/send`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -132,7 +137,7 @@ function App() {
     }
     try {
       if (adminRequired && !adminToken) { setShowLogin(true); return }
-      const response = await fetch(`http://localhost:5001/demandes/${id}`, {
+      const response = await fetch(url(`/demandes/${id}`), {
         method: 'DELETE'
       })
       if (!response.ok) {
@@ -151,7 +156,7 @@ function App() {
     try {
       if (adminRequired && !adminToken) return
       setLoading(true)
-      const response = await fetch('http://localhost:5001/historique')
+  const response = await fetch(url('/historique'))
       if (!response.ok) {
         throw new Error('Erreur lors de la récupération de l\'historique')
       }
@@ -169,7 +174,7 @@ function App() {
     try {
       if (adminRequired && !adminToken) return
       setLoading(true)
-      const response = await fetch('http://localhost:5001/reporting/stats')
+  const response = await fetch(url('/reporting/stats'))
       if (!response.ok) {
         throw new Error('Erreur lors de la récupération des statistiques')
       }
@@ -187,7 +192,7 @@ function App() {
     try {
       if (adminRequired && !adminToken) return
       setLoading(true)
-      const response = await fetch('http://localhost:5001/sous-traitants')
+  const response = await fetch(url('/sous-traitants'))
       if (!response.ok) {
         throw new Error('Erreur lors de la récupération des sous-traitants')
       }
@@ -227,7 +232,7 @@ function App() {
       const formData = new FormData()
       formData.append('file', file)
       
-      const response = await fetch('http://localhost:5001/sous-traitants/upload', {
+      const response = await fetch(url('/sous-traitants/upload'), {
         method: 'POST',
         body: formData
       })
@@ -282,7 +287,7 @@ function App() {
   const fetchEmails = async () => {
     try {
       if (adminRequired && !adminToken) { setShowLogin(true); return }
-      const response = await fetch('http://localhost:5001/fetch_emails', {
+      const response = await fetch(url('/fetch_emails'), {
         method: 'POST'
       })
       if (!response.ok) {
@@ -293,7 +298,7 @@ function App() {
       setTimeout(() => {
         fetchDemandes()
         // Récupérer l'état du dernier fetch (mode AI/NLP, inserted)
-        fetch('http://localhost:5001/fetch_status')
+        fetch(url('/fetch_status'))
           .then(r => r.json())
           .then(setLastFetch)
       }, 3000)
@@ -305,7 +310,7 @@ function App() {
   const saveCredentials = async () => {
     try {
       if (adminRequired && !adminToken) { setShowLogin(true); return }
-      const response = await fetch('http://localhost:5001/save_credentials', {
+      const response = await fetch(url('/save_credentials'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, api_password: apiPassword, OPENAI_API_KEY: openaiKey, OPENAI_MODEL: openaiModel })
@@ -319,7 +324,7 @@ function App() {
       localStorage.setItem('OPENAI_MODEL', openaiModel);
       alert('Identifiants enregistrés côté serveur !');
       // Rafraîchir le statut IA
-      fetch('http://localhost:5001/credentials/status')
+      fetch(url('/credentials/status'))
         .then(r=>r.json())
         .then(d => {
           setAiEnabled(!!d.openai_present)
@@ -368,7 +373,7 @@ function App() {
     let interval
     const init = async () => {
       try {
-        const h = await fetch('http://localhost:5001/health')
+        const h = await fetch(url('/health'))
         const d = await h.json()
         const req = !!d.require_admin
         setAdminRequired(req)
@@ -381,7 +386,7 @@ function App() {
       // Charger statut IA et données seulement si accès autorisé
       if (!adminRequired || adminToken) {
         try {
-          const r = await fetch('http://localhost:5001/credentials/status')
+          const r = await fetch(url('/credentials/status'))
           if (r.ok) {
             const d2 = await r.json()
             setAiEnabled(!!d2.openai_present)
