@@ -426,7 +426,7 @@ function App() {
     e?.preventDefault()
     setLoginError('')
     try {
-      const resp = await fetch('http://localhost:5001/auth/login', {
+      const resp = await fetch(url('/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: adminPw })
@@ -604,7 +604,7 @@ function App() {
                 <i className="fas fa-envelope"></i> Récupérer les emails
               </button>
               <a 
-                href="http://localhost:5001/demandes/export" 
+                href={`${API_BASE}/demandes/export`} 
                 className="btn btn-secondary"
                 download
               >
@@ -614,7 +614,7 @@ function App() {
           )}
           {activeTab === 'historique' && (
             <a 
-              href="http://localhost:5001/reporting/export?type=historique" 
+              href={`${API_BASE}/reporting/export?type=historique`} 
               className="btn btn-secondary"
               download
             >
@@ -623,7 +623,7 @@ function App() {
           )}
           {activeTab === 'reporting' && (
             <a 
-              href="http://localhost:5001/reporting/export?type=stats" 
+              href={`${API_BASE}/reporting/export?type=stats`} 
               className="btn btn-secondary"
               download
             >
@@ -706,7 +706,7 @@ function App() {
                 setLoading(true);
                 setError(null);
                 try {
-                  const response = await fetch('http://localhost:5001/demandes', {
+                  const response = await fetch(url('/demandes'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(newDemande)

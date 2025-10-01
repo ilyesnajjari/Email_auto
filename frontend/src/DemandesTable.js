@@ -10,8 +10,8 @@ const DemandesTable = () => {
   const [previewData, setPreviewData] = useState({ subject: '', body: '', recipients: [], ville: '', lang: '' });
   const [sending, setSending] = useState(false);
 
-  // URL de l'API backend (ajustez le port si nécessaire)
-  const API_URL = 'http://localhost:5001';
+  // URL de l'API backend, configurable via Vite env
+  const API_URL = (import.meta.env.VITE_API_BASE || '').replace(/\/+$/, '');
 
   // Charger les demandes au montage du composant
   useEffect(() => {
