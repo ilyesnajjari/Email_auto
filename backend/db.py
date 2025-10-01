@@ -1,10 +1,12 @@
 import sqlite3
 import datetime
 import re
+import os
 
-# Connexion globale à SQLite
-conn = sqlite3.connect("demandes.db", check_same_thread=False)
-c = conn.cursor()
+# Connexion globale à SQLite (chemin configurable)
+DB_PATH = os.getenv("SQLITE_PATH", "demandes.db")
+print(f"[BOOT] db.py version 2025-10-01 | DB_PATH={DB_PATH}")
+conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 
 class Database:
     def __init__(self, db_path="demandes.db"):
