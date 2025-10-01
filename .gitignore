@@ -32,3 +32,4 @@ build/
 # Frontend static
 frontend/public/vite.svg
 frontend/src/assets/react.svg
+backend/credentials.txt
